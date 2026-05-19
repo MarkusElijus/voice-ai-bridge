@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% set active = view_name|default("calls") %}
+
+{% block title %}{{ view_title|default("Call Logs") }}{% endblock %}
+{% block page_title %}{{ view_title|default("Call Logs") }}{% endblock %}
+{% block subtitle %}<div class="subtitle">{{ total }} call{{ "" if total == 1 else "s" }} matching filter{% if since_label %}, since {{ since_label }}{% endif %}</div>{% endblock %}
+
+{% block content %}
+
+<form class="filters" hx-get="{{ list_path|default('/admin/calls') }}" hx-target="#calls-table-wrapper" hx-trigger="change, search delay:300ms from:input[type=search]" hx-push-url="true">
+  <input type="search" name="q" placeholder="Search name, phone, email…" value="{{ search or '' }}">
+
+  <select name="since">
+    <option value="24h"  {% if since == '24h'  %}selected{% endif %}>Last 24h</option>
+    <option value="7d"   {% if since == '7d'   %}selected{% endif %}>Last 7 days</option>
+    <option value="30d"  {% if since == '30d'  %}selected{% endif %}>Last 30 days</option>
+    <option value="all"  {% if since == 'all'  %}selected{% endif %}>All time</option>
+  </select>
+
+  <select name="disposition">
+    <option value="">All dispositions</option>
+    <option value="scheduled"               {% if disposition == 'scheduled'               %}selected{% endif %}>Scheduled</option>
+    <option value="transferred_attorney"    {% if disposition == 'transferred_attorney'    %}selected{% endif %}>Transferred (attorney)</option>
+    <option value="transferred_voicemail"   {% if disposition == 'transferred_voicemail'   %}selected{% endif %}>Transferred (voicemail)</option>
+    <option value="appointment_offered_no_response" {% if disposition == 'appointment_offered_no_response' %}selected{% endif %}>Appointment offered</option>
+    <option value="info_only"               {% if disposition == 'info_only'               %}selected{% endif %}>Info only</option>
+    <option value="abandoned"               {% if disposition == 'abandoned'               %}selected{% endif %}>Abandoned</option>
+    <option value="in_progress"             {% if disposition == 'in_progress'             %}selected{% endif %}>In progress</option>
+  </select>
+</form>
+
+<div id="calls-table-wrapper">
+  {% include "_calls_table.html" %}
+</div>
+
+{% endblock %}

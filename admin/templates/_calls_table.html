@@ -1,0 +1,99 @@
+{# Inner-table partial — re-rendered by HTMX when filters change. #}
+
+{% if calls %}
+<table class="calls">
+  <thead>
+    <tr>
+      <th>Started</th>
+      <th>Caller</th>
+      <th>Status</th>
+      <th>Service</th>
+      <th>Outcome</th>
+      <th>Disposition</th>
+      <th>Meeting</th>
+      <th>Duration</th>
+      <th>Cost</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for c in calls %}
+    <tr onclick="window.location='/admin/calls/{{ c.id }}'">
+      <td class="mono">{{ c.started_at.strftime('%Y-%m-%d %H:%M') if c.started_at else '—' }}</td>
+      <td>
+        {% if c.caller_fullname %}
+          {{ c.caller_fullname }}
+          <div class="muted mono" style="font-size: 0.7rem;">{{ c.caller_number or '' }}</div>
+        {% elif c.caller_number %}
+          <span class="mono">{{ c.caller_number }}</span>
+        {% else %}
+          <span class="empty-cell">—</span>
+        {% endif %}
+      </td>
+      <td>{% if c.caller_status %}<span class="badge">{{ c.caller_status }}</span>{% else %}<span class="empty-cell">—</span>{% endif %}</td>
+      <td>{% if c.service_type %}{{ c.service_type }}{% else %}<span class="empty-cell">—</span>{% endif %}</td>
+      <td>{% if c.call_outcome %}{{ c.call_outcome }}{% else %}<span class="empty-cell">—</span>{% endif %}</td>
+      <td>
+        {% if c.disposition == 'scheduled' %}
+          <span class="badge badge-success">Scheduled</span>
+        {% elif c.disposition in ('transferred_attorney', 'transferred_voicemail') %}
+          <span class="badge badge-accent">{{ 'Attorney' if c.disposition == 'transferred_attorney' else 'Voicemail' }}</span>
+        {% elif c.disposition == 'appointment_offered_no_response' %}
+          <span class="badge badge-accent">Offered</span>
+        {% elif c.disposition == 'in_progress' %}
+          <span class="badge badge-accent">Live</span>
+        {% elif c.disposition == 'abandoned' %}
+          <span class="badge badge-danger">Abandoned</span>
+        {% elif c.disposition == 'info_only' %}
+          <span class="badge badge-muted">Info</span>
+        {% else %}
+          <span class="empty-cell">—</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if c.meeting_scheduled %}
+          ✓
+        {% elif c.meeting_scheduled is sameas false %}
+          —
+        {% else %}
+          <span class="empty-cell">—</span>
+        {% endif %}
+      </td>
+      <td class="mono">
+        {% if c.duration_seconds %}
+          {{ '%d:%02d' | format(c.duration_seconds // 60, c.duration_seconds % 60) }}
+        {% else %}
+          <span class="empty-cell">—</span>
+        {% endif %}
+      </td>
+      <td class="mono">
+        {% if c.total_cost_usd is not none %}
+          ${{ '%.4f' | format(c.total_cost_usd) }}
+        {% else %}
+          <span class="empty-cell">—</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<div class="pagination">
+  <span class="info">Page {{ page }} of {{ pages }} — {{ total }} total</span>
+  {% if page > 1 %}
+    <a class="btn btn-secondary" href="?{{ qs_prev }}" hx-get="?{{ qs_prev }}" hx-target="#calls-table-wrapper" hx-push-url="true">‹ Prev</a>
+  {% endif %}
+  {% if page < pages %}
+    <a class="btn btn-secondary" href="?{{ qs_next }}" hx-get="?{{ qs_next }}" hx-target="#calls-table-wrapper" hx-push-url="true">Next ›</a>
+  {% endif %}
+</div>
+{% else %}
+  <div class="card" style="text-align: center; color: var(--fg-muted);">
+    <p style="margin: 1rem 0;">No calls match the current filter.</p>
+    {% if not has_db %}
+      <p class="muted" style="font-size: 0.85rem;">
+        Heads up: <code>DATABASE_URL</code> isn't configured, so this list is empty by design.
+        Run <code>migrations/001_initial.sql</code> in Supabase Studio and paste the pooler URL into <code>.env</code>.
+      </p>
+    {% endif %}
+  </div>
+{% endif %}

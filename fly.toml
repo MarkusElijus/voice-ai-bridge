@@ -1,0 +1,41 @@
+app = "acme-voice-agent"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8000"
+  PYTHONUNBUFFERED = "1"
+  ENV = "prod"
+  LOG_LEVEL = "INFO"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "get"
+    path = "/health"
+    protocol = "http"
+    timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"
+  cpu_kind = "shared"
+  cpus = 1
+  # On rolling-deploy stops, Fly sends SIGINT then waits kill_timeout before
+  # SIGKILL. Default 5s is too aggressive for live phone calls — uvicorn's
+  # graceful-shutdown (300s, configured in Dockerfile CMD) needs room to
+  # drain in-flight WebSockets. 5m is Fly's documented max for this knob.
+  # Pair with Dockerfile's --timeout-graceful-shutdown=300 so the two layers
+  # cooperate (diagnosed from call bSl5HIQl4w0 2026-05-12).
+  kill_signal = "SIGINT"
+  kill_timeout = "5m"

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Placeholder monogram for the example "Acme Law" agent.
+  Circular ACME LAW text around the top arc, diagonal X with A and L
+  on either side. Swap with your own brand by overwriting this file
+  (same name, /admin/static/logo.svg).
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" aria-label="Acme Law" role="img">
+  <!-- White circular background so the emblem reads cleanly on any surface -->
+  <circle cx="100" cy="100" r="100" fill="#ffffff"/>
+
+  <!-- Outer ring (thicker) -->
+  <circle cx="100" cy="100" r="92" fill="none" stroke="#111111" stroke-width="2.2"/>
+  <!-- Inner ring (thinner) -->
+  <circle cx="100" cy="100" r="80" fill="none" stroke="#111111" stroke-width="1.2"/>
+
+  <!-- Diagonal X behind the D and L marks. The four lines start near the
+       inner-ring boundary and meet at the center, forming the cross. -->
+  <g stroke="#111111" stroke-width="1.6" stroke-linecap="round">
+    <line x1="42"  y1="42"  x2="158" y2="158"/>
+    <line x1="158" y1="42"  x2="42"  y2="158"/>
+  </g>
+
+  <!-- "A" on the left center, "L" on the right center -->
+  <text x="64" y="115" font-family="Georgia, 'Times New Roman', serif"
+        font-size="42" font-weight="600" text-anchor="middle" fill="#111111">A</text>
+  <text x="136" y="115" font-family="Georgia, 'Times New Roman', serif"
+        font-size="42" font-weight="600" text-anchor="middle" fill="#111111">L</text>
+
+  <!-- Curved "ACME LAW" along the top of the outer ring -->
+  <defs>
+    <path id="topArc" d="M 28 100 A 72 72 0 0 1 172 100"/>
+  </defs>
+  <text font-family="Georgia, 'Times New Roman', serif" font-size="13"
+        font-weight="700" letter-spacing="5" fill="#111111">
+    <textPath href="#topArc" startOffset="50%" text-anchor="middle">
+      ACME LAW
+    </textPath>
+  </text>
+
+</svg>

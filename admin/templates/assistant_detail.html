@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% set active = "assistants" %}
+
+{% block title %}{{ agent.label }}{% endblock %}
+{% block page_title %}{{ agent.label }}{% endblock %}
+{% block subtitle %}<div class="subtitle"><span class="mono">{{ agent.agent_id }}</span> &middot; {{ agent.description }}</div>{% endblock %}
+
+{% block page_actions %}
+<div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+  <a class="btn btn-secondary" href="/admin/playground?agent_id={{ agent.agent_id }}">Test Chat</a>
+  <a class="btn btn-secondary" href="/admin/playground?tab=voice&amp;agent_id={{ agent.agent_id }}">Test Voice</a>
+  <a class="btn btn-secondary" href="/admin/assistants">All Assistants</a>
+</div>
+{% endblock %}
+
+{% block content %}
+
+{% if not has_db %}
+<div class="card" style="border-color: var(--danger);">
+  <h2 style="color: var(--danger);">Database not configured</h2>
+  <p>Prompt edits require the <code>prompts</code> table. This assistant is currently using its file fallback.</p>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Policy</h2>
+  <div class="field-grid">
+    <div class="field">
+      <div class="field-label">Routing</div>
+      <div class="field-value">{{ agent.routing_note }}</div>
+    </div>
+    <div class="field">
+      <div class="field-label">Enabled tools</div>
+      <div class="field-value">
+        {% for tool in tool_names %}
+          <span class="badge badge-muted">{{ tool }}</span>{% if not loop.last %} {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+    <div class="field">
+      <div class="field-label">Chat playground stubs</div>
+      <div class="field-value">
+        {% if stub_tools %}
+          {% for tool in stub_tools %}
+            <span class="badge badge-muted">{{ tool }}</span>{% if not loop.last %} {% endif %}
+          {% endfor %}
+        {% else %}
+          <span class="muted">None</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="field">
+      <div class="field-label">Fallback prompt</div>
+      <div class="field-value mono">{{ agent.prompt_fallback_path.name }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Active Prompt</h2>
+  <form action="/admin/assistants/{{ agent.agent_id }}/prompt" method="post">
+    <textarea name="content" rows="24" style="width: 100%; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.85rem; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.75rem; resize: vertical;">{{ prompt_content or '' }}</textarea>
+
+    <div style="display: flex; gap: 0.5rem; align-items: center; margin-top: 0.75rem; flex-wrap: wrap;">
+      <input type="text" name="notes" placeholder="Notes (optional)"
+             style="flex: 1 1 14rem; min-width: 14rem; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.4rem 0.6rem; font-size: 0.85rem;">
+
+      <button type="submit" name="publish" value="false" class="btn btn-secondary">Save Draft</button>
+      <button type="submit" name="publish" value="true" class="btn"
+              onclick="return confirm('Publish this prompt for {{ agent.label }}? New calls for this assistant will use it immediately.')">Save & Publish</button>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Version History</h2>
+  {% if history %}
+  <table class="calls">
+    <thead>
+      <tr>
+        <th>Created</th>
+        <th>Status</th>
+        <th>Notes</th>
+        <th>Length</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for v in history %}
+      <tr>
+        <td class="mono">{{ v.created_at.strftime('%Y-%m-%d %H:%M') if v.created_at else '-' }}</td>
+        <td>{% if v.is_active %}<span class="badge badge-success">Active</span>{% else %}<span class="badge badge-muted">Draft</span>{% endif %}</td>
+        <td>{{ v.notes or '-' }}</td>
+        <td class="mono">{{ '{:,}'.format(v.content_length) }} chars</td>
+        <td>
+          {% if not v.is_active %}
+            <form action="/admin/assistants/{{ agent.agent_id }}/prompt/publish/{{ v.id }}" method="post" style="display: inline;">
+              <button class="btn btn-secondary" type="submit"
+                      onclick="return confirm('Make this the active prompt for {{ agent.label }}?')">Make Active</button>
+            </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <p class="muted">No saved prompt versions yet. Save the current text above to create the first version for this assistant.</p>
+  {% endif %}
+</div>
+
+{% endblock %}

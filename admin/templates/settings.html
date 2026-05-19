@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% set active = "settings" %}
+
+{% block title %}Settings{% endblock %}
+{% block page_title %}Settings{% endblock %}
+{% block subtitle %}<div class="subtitle">Read-only view. Edit values via Fly.io secrets (production) or <code>.env</code> (local dev), then redeploy.</div>{% endblock %}
+
+{% block content %}
+
+<div class="card">
+  <h2>Environment</h2>
+  <table class="calls">
+    <thead>
+      <tr><th>Key</th><th>Value</th></tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td class="mono">{{ r.name }}</td>
+        <td class="mono">
+          {% if r.secret %}<span class="badge badge-muted" style="margin-right: 0.5rem;">secret</span>{% endif %}
+          {{ r.value }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>How to change a value</h2>
+  <p class="muted" style="font-size: 0.85rem;">
+    <strong>Production (Fly.io):</strong> <code>fly secrets set KEY=VALUE</code> then <code>fly deploy</code>.<br>
+    <strong>Local dev:</strong> edit <code>.env</code>, restart <code>uvicorn</code>.<br>
+    For assistant prompts, use the <a href="/admin/assistants">Assistants</a> tab. Those are editable from this UI.
+  </p>
+</div>
+
+{% endblock %}

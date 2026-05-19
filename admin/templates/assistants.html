@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% set active = "assistants" %}
+
+{% block title %}Assistants{% endblock %}
+{% block page_title %}Assistants{% endblock %}
+{% block subtitle %}<div class="subtitle">Configure each Aria variant, review enabled tools, and open the playground with the selected assistant.</div>{% endblock %}
+
+{% block content %}
+
+{% if not has_db %}
+<div class="card" style="border-color: var(--danger);">
+  <h2 style="color: var(--danger);">Database not configured</h2>
+  <p>The assistant prompt editor reads and writes the <code>prompts</code> table. The app will use file fallbacks until <code>DATABASE_URL</code> is configured.</p>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Assistant Registry</h2>
+  <table class="calls">
+    <thead>
+      <tr>
+        <th>Assistant</th>
+        <th>Routing</th>
+        <th>Tools</th>
+        <th>Prompt</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for agent in agents %}
+      <tr>
+        <td>
+          <strong>{{ agent.label }}</strong><br>
+          <span class="mono muted">{{ agent.agent_id }}</span><br>
+          <span class="muted">{{ agent.description }}</span>
+        </td>
+        <td>{{ agent.routing_note }}</td>
+        <td>
+          {% for tool in tool_names.get(agent.agent_id, []) %}
+            <span class="badge badge-muted">{{ tool }}</span>{% if not loop.last %} {% endif %}
+          {% endfor %}
+        </td>
+        <td>
+          <span class="mono">{{ '{:,}'.format(prompt_lengths.get(agent.agent_id, 0)) }}</span> chars<br>
+          <span class="muted">{{ prompt_counts.get(agent.agent_id, 0) }} saved version{% if prompt_counts.get(agent.agent_id, 0) != 1 %}s{% endif %}</span>
+        </td>
+        <td>
+          <a class="btn btn-secondary" href="/admin/assistants/{{ agent.agent_id }}">Configure</a>
+          <a class="btn btn-secondary" href="/admin/playground?agent_id={{ agent.agent_id }}">Chat</a>
+          <a class="btn btn-secondary" href="/admin/playground?tab=voice&amp;agent_id={{ agent.agent_id }}">Voice</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Current Routing</h2>
+  <p>
+    phone service can keep its business-hours branch. Both branches can point to the same Aria Twilio number;
+    the bridge selects <code>aria</code> during business hours and <code>aria_after_hours</code> outside that schedule.
+  </p>
+  <p class="muted">
+    Schedule used here: Monday-Thursday 8:00 AM-4:30 PM Central, Friday 8:00 AM-2:00 PM Central, Saturday and Sunday after-hours.
+  </p>
+
+  <hr style="border: 0; border-top: 1px solid var(--border); margin: 1rem 0;">
+
+  <h3>Friday Early Close</h3>
+  {% if active_friday_override %}
+    <p>
+      Active for today: calls at or after
+      <strong>{{ time_label(active_friday_override.close_time) }}</strong>
+      route to <code>aria_after_hours</code>.
+    </p>
+  {% else %}
+    <p class="muted">No Friday early-close override is active for today.</p>
+  {% endif %}
+
+  <form action="/admin/assistants/routing/friday-early-close" method="post" style="display: grid; grid-template-columns: minmax(10rem, 1fr) minmax(9rem, 12rem) minmax(14rem, 1.5fr) auto; gap: 0.75rem; align-items: end; margin-top: 0.75rem;">
+    <label>
+      <span class="muted">Friday date</span><br>
+      <input type="date" name="override_date" value="{{ friday_default_date }}" {% if not has_db %}disabled{% endif %} required>
+    </label>
+    <label>
+      <span class="muted">Close time</span><br>
+      <select name="close_time" {% if not has_db %}disabled{% endif %}>
+        <option value="12:00">12:00 PM</option>
+        <option value="13:00">1:00 PM</option>
+        <option value="14:00">2:00 PM</option>
+      </select>
+    </label>
+    <label>
+      <span class="muted">Note</span><br>
+      <input type="text" name="note" placeholder="Optional reason" {% if not has_db %}disabled{% endif %}>
+    </label>
+    <button class="btn btn-secondary" type="submit" {% if not has_db %}disabled{% endif %}>Save Override</button>
+  </form>
+
+  {% if friday_overrides %}
+    <table class="calls" style="margin-top: 1rem;">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Close</th>
+          <th>Note</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for override in friday_overrides %}
+        <tr>
+          <td class="mono">{{ override.override_date }}</td>
+          <td>{{ time_label(override.close_time) }}</td>
+          <td>{{ override.note or "" }}</td>
+          <td>
+            <form action="/admin/assistants/routing/friday-early-close/clear" method="post" style="display: inline;">
+              <input type="hidden" name="override_date" value="{{ override.override_date }}">
+              <button class="btn btn-secondary" type="submit" onclick="return confirm('Clear this Friday early close override?')">Clear</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+</div>
+
+{% endblock %}

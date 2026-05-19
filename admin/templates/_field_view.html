@@ -1,0 +1,9 @@
+{# Re-rendered field span after a successful edit or a cancel. Mirrors the
+   inline span used in call_detail.html so HTMX outerHTML swap is seamless. #}
+<span class="field-value {% if field.value is none or field.value == '' %}empty{% endif %} editable"
+      hx-get="/admin/calls/{{ call_id }}/edit/{{ field.name }}"
+      hx-target="this"
+      hx-swap="outerHTML"
+      title="Click to edit">
+  {{ field.display or '—' }}
+</span>

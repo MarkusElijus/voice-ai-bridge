@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Voice Agent Admin{% endblock %} · Acme Law</title>
+  <link rel="icon" href="/admin/static/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/admin/static/theme.css">
+  <script src="https://unpkg.com/htmx.org@1.9.12/dist/htmx.min.js" crossorigin="anonymous"></script>
+  <script>
+    // Theme persistence — restore from localStorage on every page (incl. HTMX swaps).
+    (function () {
+      const saved = localStorage.getItem('aria-admin-theme');
+      if (saved === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+    })();
+  </script>
+  {% block head_extra %}{% endblock %}
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <span style="color: var(--fg);">
+          <svg width="32" height="32" viewBox="0 0 100 100" aria-hidden="true">
+            <use href="/admin/static/logo.svg#root" />
+          </svg>
+        </span>
+        <div>
+          <div class="brand-name">ACME LAW</div>
+          <div class="brand-name-sub">Voice Agents</div>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <a href="/admin/calls"      class="{% if active == 'calls'      %}active{% endif %}">Call Logs</a>
+        <a href="/admin/calls/test" class="{% if active == 'test_calls' %}active{% endif %}">Test Calls</a>
+        <a href="/admin/playground" class="{% if active == 'playground' %}active{% endif %}">Playground</a>
+        <a href="/admin/assistants" class="{% if active == 'assistants' %}active{% endif %}">Assistants</a>
+        <a href="/admin/costs"      class="{% if active == 'costs'      %}active{% endif %}">Costs</a>
+        <a href="/admin/settings"   class="{% if active == 'settings'   %}active{% endif %}">Settings</a>
+      </nav>
+
+      <div class="footer">
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+          <span id="theme-icon">🌙</span>
+          <span id="theme-label">Dark mode</span>
+        </button>
+        <div class="muted" style="font-size: 0.7rem; padding: 0 0.5rem;">
+          {{ env }} · build {{ build_id or "dev" }}
+        </div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="page-header">
+        <div>
+          <h1>{% block page_title %}{% endblock %}</h1>
+          {% block subtitle %}{% endblock %}
+        </div>
+        {% block page_actions %}{% endblock %}
+      </div>
+
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+
+  <script>
+    function toggleTheme() {
+      const html = document.documentElement;
+      const next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      html.setAttribute('data-theme', next);
+      localStorage.setItem('aria-admin-theme', next);
+      updateThemeButton();
+    }
+    function updateThemeButton() {
+      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      const icon = document.getElementById('theme-icon');
+      const label = document.getElementById('theme-label');
+      if (icon)  icon.textContent  = isDark ? '☀' : '🌙';
+      if (label) label.textContent = isDark ? 'Light mode' : 'Dark mode';
+    }
+    updateThemeButton();
+  </script>
+</body>
+</html>

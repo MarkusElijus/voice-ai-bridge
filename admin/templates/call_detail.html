@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% set active = "calls" %}
+
+{% block title %}Call {{ call.id }}{% endblock %}
+{% block page_title %}
+  <a href="/admin/calls" style="color: var(--fg-muted); font-size: 0.85rem; text-decoration: none;">‹ Call Logs</a>
+  <span style="color: var(--fg-muted);"> / </span>
+  <span class="mono">{{ call.id }}</span>
+{% endblock %}
+{% block subtitle %}
+<div class="subtitle">
+  {{ call.started_at.strftime('%a %b %d, %Y · %I:%M %p') if call.started_at }}
+  {% if call.duration_seconds %}· {{ '%d:%02d' | format(call.duration_seconds // 60, call.duration_seconds % 60) }}{% endif %}
+  {% if call.disposition %}· <span class="mono">{{ call.disposition }}</span>{% endif %}
+  {% if call.ended_by %}· ended by <span class="mono">{{ call.ended_by }}</span>{% endif %}
+</div>
+{% endblock %}
+
+{% block content %}
+
+{# ---- Summary card: 14 structured fields, each inline-editable ---- #}
+<div class="card">
+  <h2>Caller summary</h2>
+
+  {# Read-only origin number — comes from Twilio's caller-ID (ANI), not the
+     model. This is the actual phone number the caller dialed in from, distinct
+     from the editable `Callback number` field below (which the model extracts
+     from what the caller spoke during the conversation). For in-browser voice
+     playground calls there's no PSTN origin; we surface that explicitly. #}
+  <div class="field" style="margin-bottom: 0.75rem;">
+    <span class="field-label">From {% if call.is_test_call %}(test){% endif %}</span>
+    <span class="field-value mono">
+      {% if call.caller_number %}
+        {{ call.caller_number }}
+      {% elif call.is_test_call %}
+        <span class="muted">in-browser playground · no PSTN number</span>
+      {% else %}
+        <span class="muted">—</span>
+      {% endif %}
+    </span>
+  </div>
+
+  <div class="field-grid">
+    {% for f in fields %}
+      <div class="field">
+        <span class="field-label">{{ f.label }}</span>
+        <span class="field-value {% if f.value is none or f.value == '' %}empty{% endif %} editable"
+              hx-get="/admin/calls/{{ call.id }}/edit/{{ f.name }}"
+              hx-target="this"
+              hx-swap="outerHTML"
+              title="Click to edit">
+          {{ f.display or '—' }}
+        </span>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+
+{# ---- Recording ---- #}
+{% if recording_url %}
+<div class="card">
+  <h2>Recording
+    {% if call.recording_duration_seconds %}
+      <span class="muted" style="font-size: 0.85rem; font-weight: 400; margin-left: 0.5rem;">
+        {{ '%d:%02d' | format(call.recording_duration_seconds // 60, call.recording_duration_seconds % 60) }} · stereo (caller L / Aria R)
+        {% if call.recording_health and call.recording_health != 'ok' %}
+          · {{ call.recording_health }}{% if call.recording_mismatch_seconds %} by {{ call.recording_mismatch_seconds }}s{% endif %}
+        {% endif %}
+      </span>
+    {% endif %}
+  </h2>
+  <audio controls preload="metadata" style="width: 100%;">
+    <source src="{{ recording_url }}" type="audio/wav">
+    Your browser does not support the audio element.
+  </audio>
+  <div style="margin-top: 0.5rem;">
+    <a href="{{ recording_url }}" download="call-{{ call.id }}.wav" class="muted" style="font-size: 0.8rem;">
+      Download WAV
+    </a>
+  </div>
+</div>
+{% elif call.recording_path %}
+<div class="card">
+  <h2>Recording</h2>
+  <span class="muted">Recording exists but the storage signed URL could not be generated. Check SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY in fly secrets.</span>
+</div>
+{% endif %}
+
+{# ---- Transcript ---- #}
+<div class="card">
+  <h2>Transcript</h2>
+  {% if call.transcript_turns %}
+    <div class="transcript-chat">
+      {% for turn in call.transcript_turns %}
+        <div class="turn turn-{{ turn.role }}">
+          <div class="turn-meta">
+            <span class="turn-role">{{ "Aria" if turn.role == "assistant" else "Caller" }}</span>
+            {% if turn.ts_ms is not none %}
+              <span class="turn-time">+{{ '%d:%02d.%03d' | format((turn.ts_ms // 60000), ((turn.ts_ms // 1000) % 60), (turn.ts_ms % 1000)) }}</span>
+            {% endif %}
+          </div>
+          {# autoescape is on for .html — explicit |e documents the trust boundary
+             since this content came from caller speech via xAI transcription. #}
+          <div class="turn-bubble">{{ turn.text | e }}</div>
+        </div>
+      {% endfor %}
+    </div>
+  {% elif call.transcript_caller or call.transcript_bot %}
+    {# Fallback for older calls captured before chronological turns existed. #}
+    <div class="transcript-grid">
+      <div class="transcript-pane">
+        <h3>Caller</h3>
+        {{ (call.transcript_caller or '—') | e }}
+      </div>
+      <div class="transcript-pane">
+        <h3>Aria</h3>
+        {{ (call.transcript_bot or '—') | e }}
+      </div>
+    </div>
+  {% else %}
+    <span class="muted">No transcript captured.</span>
+  {% endif %}
+</div>
+
+{# ---- Tool calls ---- #}
+<div class="card">
+  <h2>Tool calls ({{ tool_calls | length }})</h2>
+  {% if tool_calls %}
+  <div class="tool-calls">
+    {% for tc in tool_calls %}
+    <div class="tool-call">
+      <span class="name">{{ tc.name }}</span>
+      <span class="meta">
+        {% if tc.error %}
+          <span class="badge badge-danger" style="margin-left: 0.5rem;">error</span>
+        {% else %}
+          <span class="badge badge-success" style="margin-left: 0.5rem;">ok</span>
+        {% endif %}
+        {% if tc.latency_ms is not none %} · {{ tc.latency_ms }} ms{% endif %}
+        {% if tc.started_at %} · {{ tc.started_at.strftime('%H:%M:%S') }}{% endif %}
+      </span>
+      {% if tc.args %}
+        <pre>args: {{ tc.args | tojson(indent=2) }}</pre>
+      {% endif %}
+      {% if tc.output %}
+        <pre>output: {{ tc.output | tojson(indent=2) }}</pre>
+      {% endif %}
+      {% if tc.error %}
+        <pre style="color: var(--danger);">{{ tc.error }}</pre>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+    <span class="muted">No tool calls during this conversation.</span>
+  {% endif %}
+</div>
+
+{# ---- Costs ---- #}
+<div class="card">
+  <h2>Costs</h2>
+  <div class="field-grid">
+    <div class="field">
+      <span class="field-label">xAI input audio tokens</span>
+      <span class="field-value mono">{{ '{:,}'.format(call.xai_input_audio_tokens or 0) }}</span>
+    </div>
+    <div class="field">
+      <span class="field-label">xAI output audio tokens</span>
+      <span class="field-value mono">{{ '{:,}'.format(call.xai_output_audio_tokens or 0) }}</span>
+    </div>
+    <div class="field">
+      <span class="field-label">xAI cost</span>
+      <span class="field-value mono">${{ '%.4f' | format(call.xai_cost_usd or 0) }}</span>
+    </div>
+    <div class="field">
+      <span class="field-label">Twilio cost</span>
+      <span class="field-value mono">${{ '%.4f' | format(call.twilio_cost_usd or 0) }}</span>
+    </div>
+    <div class="field">
+      <span class="field-label">Total cost</span>
+      <span class="field-value mono"
+            style="color: var(--accent); font-weight: 600;">
+        ${{ '%.4f' | format(call.total_cost_usd or 0) }}
+      </span>
+    </div>
+    <div class="field">
+      <span class="field-label">Interruptions</span>
+      <span class="field-value mono">{{ call.interruption_count or 0 }}</span>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

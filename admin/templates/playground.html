@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+{% set active = "playground" %}
+
+{% block title %}Playground{% endblock %}
+{% block page_title %}Playground{% endblock %}
+{% block subtitle %}<div class="subtitle">{% if pg_tab == "voice" %}Place a real-time voice test call to {{ selected_agent.label }} from your browser. Same code path as the production bridge.{% else %}Type-test {{ selected_agent.label }} using the active system prompt and the real tool dispatcher. Side-effect tools are stubbed in chat.{% endif %}</div>{% endblock %}
+
+{% block head_extra %}
+<style>
+  /* Tab strip */
+  .pg-tabs        { display: flex; gap: 0.25rem; margin-bottom: 0.75rem; border-bottom: 1px solid var(--border); }
+  .pg-tabs a      { padding: 0.5rem 1rem; text-decoration: none; color: var(--fg); border: 1px solid transparent; border-bottom: none; border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
+  .pg-tabs a.active { background: var(--surface); border-color: var(--border); margin-bottom: -1px; font-weight: 600; }
+
+  /* Bubble layout (chat) */
+  .pg-msgs {
+    min-height: 22rem;
+    max-height: 32rem;
+    overflow-y: auto;
+    padding: 0.5rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+  }
+  .pg-row { margin: 0.5rem 0; padding: 0.5rem 0.75rem; border-radius: var(--radius-sm); line-height: 1.4; }
+  .pg-row.user      { background: var(--surface-alt, var(--surface)); border-left: 3px solid var(--primary, #4a90e2); }
+  .pg-row.assistant { background: var(--surface);     border-left: 3px solid #2ecc71; }
+  .pg-row.tool-call { background: var(--surface);     border-left: 3px solid #f39c12; font-style: italic; font-size: 0.85rem; }
+  .pg-row.tool-out  { background: var(--bg);          border-left: 3px solid #999;    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.78rem; white-space: pre-wrap; word-break: break-word; }
+  .pg-row .who      { font-weight: 600; margin-right: 0.4rem; }
+  .pg-input         { width: 100%; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.6rem; font-size: 0.95rem; resize: vertical; }
+  .pg-controls      { display: flex; gap: 0.5rem; margin-top: 0.6rem; align-items: center; flex-wrap: wrap; }
+  .pg-status        { margin-left: auto; }
+  details.pg-prompt > summary { cursor: pointer; padding: 0.25rem 0; }
+  pre.pg-prompt-pre { white-space: pre-wrap; font-size: 0.78rem; max-height: 22rem; overflow: auto; background: var(--bg); padding: 0.5rem; border-radius: var(--radius-sm); border: 1px solid var(--border); }
+
+  /* Voice tab */
+  .pg-voice-banner  { background: #fff3cd; color: #5a4a00; border: 1px solid #ffe28a; border-radius: var(--radius-sm); padding: 0.75rem 1rem; margin-bottom: 1rem; line-height: 1.45; }
+  [data-theme="dark"] .pg-voice-banner { background: #3a2f00; color: #ffe28a; border-color: #6a5500; }
+  .pg-voice-stage   { display: flex; flex-direction: column; align-items: center; gap: 1rem; padding: 1.5rem 1rem; }
+  .pg-voice-status  { font-size: 0.95rem; color: var(--muted, #777); min-height: 1.4em; text-align: center; }
+  .pg-voice-status.error { color: #c0392b; }
+  .pg-call-btn      { font-size: 1.05rem; padding: 0.8rem 1.6rem; min-width: 12rem; }
+  .pg-call-btn.calling { background: #c0392b; }
+  .pg-meter         { height: 0.5rem; width: 16rem; background: var(--bg); border: 1px solid var(--border); border-radius: 99px; overflow: hidden; }
+  .pg-meter-fill    { height: 100%; width: 0%; background: linear-gradient(90deg, #2ecc71, #f1c40f, #e74c3c); transition: width 80ms linear; }
+  /* Mic-silence watchdog warning — visible only when JS detects extended
+     caller-channel silence outside the assistant's turns. Sits above the meter so
+     it can't be missed mid-call. Yellow/amber to read as "attention" not
+     "fatal error". */
+  .pg-voice-mic-warning {
+    background: #fff3cd; color: #5a4a00; border: 1px solid #ffe28a;
+    border-radius: var(--radius-sm); padding: 0.5rem 0.75rem;
+    font-size: 0.9rem; line-height: 1.35;
+    width: 100%; box-sizing: border-box;
+  }
+  [data-theme="dark"] .pg-voice-mic-warning {
+    background: #3a2f00; color: #ffe28a; border-color: #6a5500;
+  }
+
+  /* Live transcript bubbles for the Voice tab. Reuses the .pg-row.user /
+     .pg-row.assistant visual language from the Chat tab so the two surfaces
+     feel related; we just rename the wrapper so JS can target it without
+     stepping on the chat playground's existing #pg-msgs container. */
+  .pg-voice-transcript {
+    margin-top: 1rem;
+    max-height: 24rem;
+    overflow-y: auto;
+    padding: 0.5rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+  }
+  .pg-voice-listenback { margin-top: 1rem; }
+  .pg-voice-listenback audio { width: 100%; }
+  .pg-voice-listenback-status { font-size: 0.85rem; color: var(--muted, #777); margin-top: 0.25rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="pg-tabs" role="tablist">
+  <a href="/admin/playground?{{ chat_qs }}"   class="{% if pg_tab != 'voice' %}active{% endif %}" role="tab">Chat</a>
+  <a href="/admin/playground?{{ voice_qs }}"  class="{% if pg_tab == 'voice' %}active{% endif %}" role="tab">Voice</a>
+</div>
+
+<form class="filters" method="get" action="/admin/playground">
+  <input type="hidden" name="tab" value="{{ pg_tab }}">
+  <label for="pg-agent" class="muted">Assistant</label>
+  <select id="pg-agent" name="agent_id" onchange="this.form.submit()">
+    {% for agent in agents %}
+      <option value="{{ agent.agent_id }}" {% if agent.agent_id == selected_agent.agent_id %}selected{% endif %}>{{ agent.label }}</option>
+    {% endfor %}
+  </select>
+  <span class="muted">{{ selected_agent.routing_note }}</span>
+</form>
+
+<div class="card">
+  <details class="pg-prompt">
+    <summary><strong>Active prompt for {{ selected_agent.label }}</strong> &middot; {{ '{:,}'.format(active_prompt|length) }} chars (click to view)</summary>
+    <pre class="pg-prompt-pre">{{ active_prompt }}</pre>
+  </details>
+  <div class="muted" style="font-size: 0.78rem; margin-top: 0.4rem;">
+    Tools available: {{ tool_names|join(', ') }}.
+    {% if pg_tab == "voice" %}
+      <strong>Voice tab uses LIVE tools</strong> - every enabled tool runs against production endpoints.
+    {% else %}
+      Stubbed (no real side effect): {% for t in stub_tools %}<code>{{ t }}</code>{% if not loop.last %}, {% endif %}{% endfor %}.
+    {% endif %}
+  </div>
+</div>
+
+{% if pg_tab == "voice" %}
+
+<div class="pg-voice-banner">
+  <strong>Live tools.</strong> This call uses the same tool implementations as production for
+  <strong>{{ selected_agent.label }}</strong>. Enabled tools:
+  {% for tool in tool_names %}<code>{{ tool }}</code>{% if not loop.last %}, {% endif %}{% endfor %}.
+  <code>hubspot_book_meeting_v3</code> can book a real meeting. Use test contact details unless
+  you intend the action to actually happen.
+</div>
+
+<div class="card">
+  <div class="pg-voice-stage">
+    <button id="pg-voice-call" class="btn pg-call-btn" type="button">Call {{ selected_agent.label }}</button>
+    <div class="pg-meter" aria-hidden="true"><div id="pg-voice-meter" class="pg-meter-fill"></div></div>
+    <div id="pg-voice-mic-warning" class="pg-voice-mic-warning" style="display:none" role="alert">
+      <strong>Mic appears silent</strong> - check your headset mute, OS mic mute, Bluetooth headset switch, or whether this tab is in the background. {{ selected_agent.label }} cannot hear you right now.
+    </div>
+    <div id="pg-voice-status" class="pg-voice-status">Idle. Click call to begin.</div>
+  </div>
+
+  <div id="pg-voice-transcript" class="pg-voice-transcript" style="display:none" aria-live="polite"></div>
+
+  <div id="pg-voice-listenback" class="pg-voice-listenback" style="display:none">
+    <strong>Recording</strong>
+    <div id="pg-voice-listenback-audio"></div>
+    <div id="pg-voice-listenback-status" class="pg-voice-listenback-status"></div>
+  </div>
+</div>
+
+<script>
+  window.PLAYGROUND_AGENT_ID = {{ selected_agent.agent_id|tojson }};
+  window.PLAYGROUND_AGENT_LABEL = {{ selected_agent.label|tojson }};
+</script>
+<script type="module" src="/admin/static/voice-playground.js?v=2026-05-14-agents"></script>
+
+{% else %}
+
+<div class="card">
+  <div id="pg-msgs" class="pg-msgs" aria-live="polite"></div>
+
+  <div style="margin-top: 0.6rem;">
+    <textarea id="pg-input" class="pg-input" rows="3" placeholder="Type a message and press Enter (Shift+Enter = newline)…"></textarea>
+  </div>
+
+  <div class="pg-controls">
+    <button id="pg-send"  class="btn"           type="button">Send</button>
+    <button id="pg-reset" class="btn btn-secondary" type="button">Reset</button>
+    <span id="pg-status" class="muted pg-status"></span>
+  </div>
+</div>
+
+<script>
+(function () {
+  // Conversation lives only in this page. Refresh = wipe (per spec).
+  const agentId = {{ selected_agent.agent_id|tojson }};
+  const agentLabel = {{ selected_agent.label|tojson }};
+  let messages = [];
+  const $msgs   = document.getElementById('pg-msgs');
+  const $input  = document.getElementById('pg-input');
+  const $send   = document.getElementById('pg-send');
+  const $reset  = document.getElementById('pg-reset');
+  const $status = document.getElementById('pg-status');
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    })[c]);
+  }
+
+  function renderRow(m) {
+    const div = document.createElement('div');
+    if (m.role === 'user') {
+      div.className = 'pg-row user';
+      div.innerHTML = `<span class="who">You</span>${escapeHtml(m.content)}`;
+    } else if (m.role === 'assistant' && (m.tool_calls && m.tool_calls.length)) {
+      div.className = 'pg-row tool-call';
+      const names = m.tool_calls.map(tc => (tc.function && tc.function.name) || '?').join(', ');
+      const text  = m.content ? escapeHtml(m.content) + ' ' : '';
+      div.innerHTML = `<span class="who">${escapeHtml(agentLabel)}</span>${text}<em>called tool(s): ${escapeHtml(names)}</em>`;
+    } else if (m.role === 'assistant') {
+      div.className = 'pg-row assistant';
+      div.innerHTML = `<span class="who">${escapeHtml(agentLabel)}</span>${escapeHtml(m.content || '')}`;
+    } else if (m.role === 'tool') {
+      div.className = 'pg-row tool-out';
+      const c = m.content || '';
+      const truncated = c.length > 600 ? c.slice(0, 600) + '…' : c;
+      div.innerHTML = `<span class="who">tool→</span>${escapeHtml(truncated)}`;
+    } else {
+      // system or unexpected; skip
+      return null;
+    }
+    return div;
+  }
+
+  function renderAll() {
+    $msgs.innerHTML = '';
+    for (const m of messages) {
+      const row = renderRow(m);
+      if (row) $msgs.appendChild(row);
+    }
+    $msgs.scrollTop = $msgs.scrollHeight;
+  }
+
+  async function sendMessage() {
+    const txt = $input.value.trim();
+    if (!txt) return;
+    $input.value = '';
+    $send.disabled = true;
+    $status.textContent = agentLabel + ' is thinking...';
+
+    // Optimistically render the user turn so the UI feels responsive.
+    const optimistic = { role: 'user', content: txt };
+    messages.push(optimistic);
+    renderAll();
+
+    try {
+      const r = await fetch('/admin/playground/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          // Send everything except the optimistic user turn — the server appends it.
+          messages: messages.slice(0, -1),
+          user_text: txt,
+          agent_id: agentId,
+        }),
+      });
+      if (!r.ok) {
+        const body = await r.text();
+        $status.textContent = 'Error ' + r.status + ': ' + body.slice(0, 240);
+        return;
+      }
+      const data = await r.json();
+      messages = data.messages || [];
+      renderAll();
+      $status.textContent = '';
+    } catch (e) {
+      $status.textContent = 'Network error: ' + e;
+    } finally {
+      $send.disabled = false;
+      $input.focus();
+    }
+  }
+
+  function resetChat() {
+    messages = [];
+    renderAll();
+    $status.textContent = '';
+    $input.focus();
+  }
+
+  $send.addEventListener('click', sendMessage);
+  $reset.addEventListener('click', resetChat);
+  $input.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+
+  $input.focus();
+})();
+</script>
+
+{% endif %}
+
+{% endblock %}

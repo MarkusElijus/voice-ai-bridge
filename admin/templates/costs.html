@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% set active = "costs" %}
+
+{% block title %}Costs{% endblock %}
+{% block page_title %}Costs{% endblock %}
+{% block subtitle %}<div class="subtitle">All values in USD. Rates configured in <code>.env</code>; refine from real bills as they come in.</div>{% endblock %}
+
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+{% endblock %}
+
+{% block content %}
+
+{% if not has_db %}
+<div class="card" style="border-color: var(--danger);">
+  <h2 style="color: var(--danger);">Database not configured</h2>
+  <p>Cost data lives in the <code>calls</code> table. Set <code>DATABASE_URL</code> in <code>.env</code>.</p>
+</div>
+{% else %}
+
+<div class="card">
+  <h2>Headlines</h2>
+  <div class="field-grid">
+    <div class="field">
+      <span class="field-label">Today</span>
+      <span class="field-value mono" style="color: var(--accent); font-weight: 600;">${{ '%.4f' | format(totals.today or 0) }}</span>
+    </div>
+    <div class="field">
+      <span class="field-label">Last 7 days</span>
+      <span class="field-value mono">${{ '%.4f' | format(totals.week or 0) }}</span>
+    </div>
+    <div class="field">
+      <span class="field-label">Last 30 days</span>
+      <span class="field-value mono">${{ '%.4f' | format(totals.month or 0) }}</span>
+    </div>
+    <div class="field">
+      <span class="field-label">Total calls (all time)</span>
+      <span class="field-value mono">{{ '{:,}'.format(totals.all_calls or 0) }}</span>
+    </div>
+    <div class="field">
+      <span class="field-label">Avg cost / call</span>
+      <span class="field-value mono">${{ '%.4f' | format(totals.avg_per_call or 0) }}</span>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Daily cost — last 30 days (xAI vs Twilio)</h2>
+  <div style="height: 280px;"><canvas id="dailyChart"></canvas></div>
+</div>
+
+<div class="card">
+  <h2>Monthly volume + cost — last 6 months</h2>
+  <div style="height: 280px;"><canvas id="monthlyChart"></canvas></div>
+</div>
+
+<script>
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const accent = '#469aad';
+  const muted  = isDark ? '#b8b8be' : '#7b7b84';
+  const grid   = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)';
+  Chart.defaults.color = muted;
+  Chart.defaults.borderColor = grid;
+
+  const dailyData = {{ daily | tojson }};
+  new Chart(document.getElementById('dailyChart'), {
+    type: 'bar',
+    data: {
+      labels: dailyData.map(d => new Date(d.day).toLocaleDateString(undefined, {month: 'short', day: 'numeric'})),
+      datasets: [
+        { label: 'xAI',    data: dailyData.map(d => d.xai),    backgroundColor: accent },
+        { label: 'Twilio', data: dailyData.map(d => d.twilio), backgroundColor: muted  },
+      ],
+    },
+    options: {
+      maintainAspectRatio: false,
+      responsive: true,
+      scales: {
+        x: { stacked: true, grid: { color: grid } },
+        y: { stacked: true, grid: { color: grid }, ticks: { callback: v => '$' + v.toFixed(4) } },
+      },
+      plugins: { legend: { position: 'top' } },
+    },
+  });
+
+  const monthlyData = {{ monthly | tojson }};
+  new Chart(document.getElementById('monthlyChart'), {
+    type: 'line',
+    data: {
+      labels: monthlyData.map(d => new Date(d.month).toLocaleDateString(undefined, {month: 'short', year: '2-digit'})),
+      datasets: [
+        {
+          label: 'Total cost ($)',
+          data: monthlyData.map(d => d.total),
+          borderColor: accent, backgroundColor: 'rgba(70, 154, 173, 0.15)',
+          tension: 0.3, yAxisID: 'y',
+        },
+        {
+          label: 'Call count',
+          data: monthlyData.map(d => d.call_count),
+          borderColor: muted, borderDash: [4, 4], yAxisID: 'y1',
+        },
+      ],
+    },
+    options: {
+      maintainAspectRatio: false,
+      responsive: true,
+      scales: {
+        x: { grid: { color: grid } },
+        y:  { type: 'linear', position: 'left',  grid: { color: grid }, ticks: { callback: v => '$' + v.toFixed(2) } },
+        y1: { type: 'linear', position: 'right', grid: { drawOnChartArea: false }, beginAtZero: true },
+      },
+      plugins: { legend: { position: 'top' } },
+    },
+  });
+</script>
+
+{% endif %}
+
+{% endblock %}
