@@ -118,7 +118,3 @@ This is a stripped-down template. Production-only pieces removed:
 - Firm-specific migration scripts (agent renames, schedule overrides)
 
 The architecture, patterns, and most module-level code are otherwise identical to the working version.
-
-## License
-
-MIT (or your preferred license — adjust before publishing).
